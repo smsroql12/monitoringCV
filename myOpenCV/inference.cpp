@@ -28,9 +28,7 @@ std::vector<Detection> Inference::runInference(const cv::Mat& input)
     int dimensions = outputs[0].size[2];
 
     bool yolov8 = false;
-    // yolov5 has an output of shape (batchSize, 25200, 85) (Num classes + box[x,y,w,h] + confidence[c])
-    // yolov8 has an output of shape (batchSize, 84,  8400) (Num classes + box[x,y,w,h])
-    if (dimensions > rows) // Check if the shape[2] is more than shape[1] (yolov8)
+    if (dimensions > rows)
     {
         yolov8 = true;
         rows = outputs[0].size[2];
@@ -54,16 +52,12 @@ std::vector<Detection> Inference::runInference(const cv::Mat& input)
         {
             float* classes_scores = data + 4;
 
-            cv::Mat scores(1, classes.size(), CV_32FC1, classes_scores);
-            cv::Point class_id;
-            double maxClassScore;
+            float person_score = classes_scores[0];
 
-            minMaxLoc(scores, 0, &maxClassScore, 0, &class_id);
-
-            if (maxClassScore > modelScoreThreshold)
+            if (person_score > modelScoreThreshold)
             {
-                confidences.push_back(maxClassScore);
-                class_ids.push_back(class_id.x);
+                confidences.push_back(person_score);
+                class_ids.push_back(0);
 
                 float x = data[0];
                 float y = data[1];
@@ -72,56 +66,20 @@ std::vector<Detection> Inference::runInference(const cv::Mat& input)
 
                 int left = int((x - 0.5 * w) * x_factor);
                 int top = int((y - 0.5 * h) * y_factor);
-
                 int width = int(w * x_factor);
                 int height = int(h * y_factor);
 
                 boxes.push_back(cv::Rect(left, top, width, height));
             }
         }
-        else // yolov5
-        {
-            float confidence = data[4];
-
-            if (confidence >= modelConfidenceThreshold)
-            {
-                float* classes_scores = data + 5;
-
-                cv::Mat scores(1, classes.size(), CV_32FC1, classes_scores);
-                cv::Point class_id;
-                double max_class_score;
-
-                minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
-
-                if (max_class_score > modelScoreThreshold)
-                {
-                    confidences.push_back(confidence);
-                    class_ids.push_back(class_id.x);
-
-                    float x = data[0];
-                    float y = data[1];
-                    float w = data[2];
-                    float h = data[3];
-
-                    int left = int((x - 0.5 * w) * x_factor);
-                    int top = int((y - 0.5 * h) * y_factor);
-
-                    int width = int(w * x_factor);
-                    int height = int(h * y_factor);
-
-                    boxes.push_back(cv::Rect(left, top, width, height));
-                }
-            }
-        }
-
         data += dimensions;
     }
 
     std::vector<int> nms_result;
     cv::dnn::NMSBoxes(boxes, confidences, modelScoreThreshold, modelNMSThreshold, nms_result);
 
-    std::vector<Detection> detections{};
-    for (unsigned long i = 0; i < nms_result.size(); ++i)
+    std::vector<Detection> detections;
+    for (size_t i = 0; i < nms_result.size(); ++i)
     {
         int idx = nms_result[i];
 
@@ -129,14 +87,9 @@ std::vector<Detection> Inference::runInference(const cv::Mat& input)
         result.class_id = class_ids[idx];
         result.confidence = confidences[idx];
 
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<int> dis(100, 255);
-        result.color = cv::Scalar(dis(gen),
-            dis(gen),
-            dis(gen));
+        result.color = cv::Scalar(0, 255, 0);
 
-        result.className = classes[result.class_id];
+        result.className = "person";
         result.box = boxes[idx];
 
         detections.push_back(result);

@@ -36,13 +36,13 @@ private:
     std::string classesPath{};
     bool cudaEnabled{};
 
-    std::vector<std::string> classes{ "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" };
+    std::vector<std::string> classes{ "person" };
 
     cv::Size2f modelShape{};
 
-    float modelConfidenceThreshold{ 0.25 };
-    float modelScoreThreshold{ 0.45 };
-    float modelNMSThreshold{ 0.50 };
+    float modelConfidenceThreshold{ 0.25f };
+    float modelScoreThreshold{ 0.45f };
+    float modelNMSThreshold{ 0.50f };
 
     bool letterBoxForSquare = true;
 

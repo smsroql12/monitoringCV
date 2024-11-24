@@ -1,7 +1,8 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
-#include <vector>
-#include "inference.h" // Inference class 사용
+#include <unordered_map>
+#include "inference.h"
+#include "deepsort.h"
 
 using namespace std;
 using namespace cv;
@@ -18,55 +19,57 @@ int main(int argc, char** argv)
     VideoCapture cap(videoPath);
 
     if (!cap.isOpened()) {
-        cerr << "Error: Could not open video file " << videoPath << endl;
+        cerr << "Error: Could not open video file" << endl;
         return -1;
     }
 
     Size resizeDim(640, 480);
 
-    while (true)
-    {
+    // DeepSORT 초기화
+    DeepSORT tracker;
+
+    while (true) {
         Mat frame;
         cap >> frame;
-
-        if (frame.empty())
-            break;
+        if (frame.empty()) break;
 
         resize(frame, frame, resizeDim);
 
-        vector<Detection> output = inf.runInference(frame);
+        // YOLO 모델을 통해 탐지 수행
+        vector<Detection> detections = inf.runInference(frame);
 
-        Mat grayFrame;
-        cvtColor(frame, grayFrame, COLOR_BGR2GRAY);
-        cvtColor(grayFrame, grayFrame, COLOR_GRAY2BGR);
+        // 탐지 결과를 DeepSORT 입력 형식으로 변환
+        vector<DeepSORT::Track> tracks = tracker.update(detections, frame);
 
         Mat mask = Mat::zeros(frame.size(), CV_8UC1);
 
-        for (const auto& detection : output)
-        {
-            Rect box = detection.box;
-            Scalar color = detection.color;
+        for (const auto& track : tracks) {
+            int id = track.id;
+            Rect currentRect = track.bbox;
+            Scalar color = Scalar(0, 255, 0);
 
-            rectangle(mask, box, Scalar(255), FILLED);
-            rectangle(frame, box, color, 2);
+            rectangle(frame, currentRect, color, 2);
+            putText(frame, "ID: " + to_string(id),
+                Point(currentRect.x, currentRect.y - 10),
+                FONT_HERSHEY_SIMPLEX, 0.5, color, 1);
 
-            // 신뢰도 점수와 함께 "Person" 표시
-            string classString = "Person " + to_string(detection.confidence).substr(0, 4);
-            putText(frame, classString, Point(box.x, box.y - 10),
-                FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 255, 0), 1);
+            rectangle(mask, currentRect, Scalar(255), FILLED);
         }
 
         Mat invertedMask;
         bitwise_not(mask, invertedMask);
 
+        Mat grayFrame;
+        cvtColor(frame, grayFrame, COLOR_BGR2GRAY);
+        cvtColor(grayFrame, grayFrame, COLOR_GRAY2BGR);
+
         Mat resultFrame;
         bitwise_and(grayFrame, grayFrame, resultFrame, invertedMask);
         frame.copyTo(resultFrame, mask);
 
-        imshow("Person Detection", resultFrame);
+        imshow("Person Detection with Grayscale Background", resultFrame);
 
-        if (waitKey(1) == 27)
-            break;
+        if (waitKey(1) == 27) break;
     }
 
     cap.release();

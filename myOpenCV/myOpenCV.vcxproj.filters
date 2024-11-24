@@ -21,6 +21,9 @@
     <ClCompile Include="inference.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="deepsort.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -32,6 +35,9 @@
       <Filter>소스 파일</Filter>
     </ClInclude>
     <ClInclude Include="getopt.h">
+      <Filter>소스 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="deepsort.h">
       <Filter>소스 파일</Filter>
     </ClInclude>
   </ItemGroup>

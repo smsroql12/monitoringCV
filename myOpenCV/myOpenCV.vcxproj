@@ -106,6 +106,8 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>C:\opencv\build\include;C:\onnxruntime\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.3\include;C:\TensorRT-8.5.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard_C>Default</LanguageStandard_C>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -131,6 +133,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="deepsort.cpp" />
     <ClCompile Include="inference.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
@@ -138,6 +141,7 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="deepsort.h" />
     <ClInclude Include="getopt.h" />
     <ClInclude Include="inference.h" />
   </ItemGroup>

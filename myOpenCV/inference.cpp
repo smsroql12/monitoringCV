@@ -1,127 +1,93 @@
 #include "inference.h"
 
-Inference::Inference(const std::string& onnxModelPath, const cv::Size& modelInputShape, const std::string& classesTxtFile, const bool& runWithCuda)
+Inference::Inference(const std::string& onnxModelPath, const cv::Size& modelInputShape, const std::string& classesTxtFile, const bool& runWithMPS)
 {
     modelPath = onnxModelPath;
     modelShape = modelInputShape;
     classesPath = classesTxtFile;
-    cudaEnabled = runWithCuda;
+    mpsEnabled = runWithMPS;
 
     loadOnnxNetwork();
-    // loadClassesFromFile(); The classes are hard-coded for this example
 }
 
 std::vector<Detection> Inference::runInference(const cv::Mat& input)
 {
-    cv::Mat modelInput = input;
+    cv::Mat modelInput;
     if (letterBoxForSquare && modelShape.width == modelShape.height)
-        modelInput = formatToSquare(modelInput);
+        modelInput = formatToSquare(input);
+    else
+        modelInput = input.clone();
 
+    // Create input blob
     cv::Mat blob;
     cv::dnn::blobFromImage(modelInput, blob, 1.0 / 255.0, modelShape, cv::Scalar(), true, false);
     net.setInput(blob);
 
+    // Forward pass
     std::vector<cv::Mat> outputs;
     net.forward(outputs, net.getUnconnectedOutLayersNames());
 
+    // Parse YOLOv8 results
     int rows = outputs[0].size[1];
     int dimensions = outputs[0].size[2];
 
-    bool yolov8 = false;
-    if (dimensions > rows)
-    {
-        yolov8 = true;
+    if (dimensions > rows) {
         rows = outputs[0].size[2];
         dimensions = outputs[0].size[1];
-
         outputs[0] = outputs[0].reshape(1, dimensions);
         cv::transpose(outputs[0], outputs[0]);
     }
-    float* data = (float*)outputs[0].data;
 
-    float x_factor = modelInput.cols / modelShape.width;
-    float y_factor = modelInput.rows / modelShape.height;
-
-    std::vector<int> class_ids;
-    std::vector<float> confidences;
-    std::vector<cv::Rect> boxes;
-
-    for (int i = 0; i < rows; ++i)
-    {
-        if (yolov8)
-        {
-            float* classes_scores = data + 4;
-
-            float person_score = classes_scores[0];
-
-            if (person_score > modelScoreThreshold)
-            {
-                confidences.push_back(person_score);
-                class_ids.push_back(0);
-
-                float x = data[0];
-                float y = data[1];
-                float w = data[2];
-                float h = data[3];
-
-                int left = int((x - 0.5 * w) * x_factor);
-                int top = int((y - 0.5 * h) * y_factor);
-                int width = int(w * x_factor);
-                int height = int(h * y_factor);
-
-                boxes.push_back(cv::Rect(left, top, width, height));
-            }
-        }
-        data += dimensions;
-    }
-
-    std::vector<int> nms_result;
-    cv::dnn::NMSBoxes(boxes, confidences, modelScoreThreshold, modelNMSThreshold, nms_result);
+    float x_factor = input.cols / modelShape.width;
+    float y_factor = input.rows / modelShape.height;
 
     std::vector<Detection> detections;
-    for (size_t i = 0; i < nms_result.size(); ++i)
-    {
-        int idx = nms_result[i];
+    for (int i = 0; i < rows; ++i) {
+        const float* data = (float*)outputs[0].data + i * dimensions;
+        float confidence = data[4];
 
-        Detection result;
-        result.class_id = class_ids[idx];
-        result.confidence = confidences[idx];
+        if (confidence >= modelConfidenceThreshold) {
+            float x = data[0], y = data[1];
+            float w = data[2], h = data[3];
 
-        result.color = cv::Scalar(0, 255, 0);
+            int left = static_cast<int>((x - w / 2) * x_factor);
+            int top = static_cast<int>((y - h / 2) * y_factor);
+            int width = static_cast<int>(w * x_factor);
+            int height = static_cast<int>(h * y_factor);
 
-        result.className = "person";
-        result.box = boxes[idx];
-
-        detections.push_back(result);
+            detections.push_back({ 0, "person", confidence, cv::Scalar(0, 255, 0), cv::Rect(left, top, width, height) });
+        }
     }
 
-    return detections;
-}
+    // Non-Maximum Suppression
+    std::vector<int> nms_indices;
+    std::vector<cv::Rect> boxes;
+    std::vector<float> confidences;
 
-void Inference::loadClassesFromFile()
-{
-    std::ifstream inputFile(classesPath);
-    if (inputFile.is_open())
-    {
-        std::string classLine;
-        while (std::getline(inputFile, classLine))
-            classes.push_back(classLine);
-        inputFile.close();
+    for (const auto& det : detections) {
+        boxes.push_back(det.box);
+        confidences.push_back(det.confidence);
     }
+
+    cv::dnn::NMSBoxes(boxes, confidences, modelConfidenceThreshold, modelNMSThreshold, nms_indices);
+
+    std::vector<Detection> filteredDetections;
+    for (const int idx : nms_indices)
+        filteredDetections.push_back(detections[idx]);
+
+    return filteredDetections;
 }
 
 void Inference::loadOnnxNetwork()
 {
     net = cv::dnn::readNetFromONNX(modelPath);
-    if (cudaEnabled)
-    {
-        std::cout << "\nRunning on CUDA" << std::endl;
-        net.setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-        net.setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
+    if (mpsEnabled) {
+        std::cout << "Running on MPS (Metal Performance Shaders)" << std::endl;
+        net.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
+        net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU); // MPS 자동 활성화
     }
-    else
-    {
-        std::cout << "\nRunning on CPU" << std::endl;
+    else {
+        std::cout << "Running on CPU" << std::endl;
         net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
         net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
     }
@@ -131,8 +97,9 @@ cv::Mat Inference::formatToSquare(const cv::Mat& source)
 {
     int col = source.cols;
     int row = source.rows;
-    int _max = MAX(col, row);
-    cv::Mat result = cv::Mat::zeros(_max, _max, CV_8UC3);
+    int _max = std::max(col, row);
+
+    cv::Mat result = cv::Mat::zeros(_max, _max, source.type());
     source.copyTo(result(cv::Rect(0, 0, col, row)));
     return result;
 }
